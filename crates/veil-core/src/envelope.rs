@@ -175,7 +175,7 @@ impl VeilMetadata {
 }
 
 /// Custom serde module for base64-encoded byte vectors.
-mod base64_bytes {
+pub mod base64_bytes {
     use base64::{engine::general_purpose::STANDARD as BASE64, Engine as _};
     use serde::{self, Deserialize, Deserializer, Serializer};
 

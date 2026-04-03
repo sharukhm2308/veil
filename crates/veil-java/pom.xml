@@ -1,0 +1,61 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <groupId>com.ninjacart</groupId>
+    <artifactId>veil-java</artifactId>
+    <version>0.2.0</version>
+    <packaging>jar</packaging>
+
+    <name>veil-java</name>
+    <description>
+        Java SDK for the Veil E2E encryption protocol.
+        Thin JNI wrapper over Rust veil-core — all crypto (X25519 ECDH +
+        HKDF-SHA256 + AES-256-GCM) executes in Rust via libveil_jni.
+    </description>
+
+    <properties>
+        <java.version>11</java.version>
+        <maven.compiler.source>11</maven.compiler.source>
+        <maven.compiler.target>11</maven.compiler.target>
+        <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+        <!-- Path to the Rust-built native library (override with -Dveil.native.dir=...) -->
+        <veil.native.dir>${project.basedir}/../../target/release</veil.native.dir>
+    </properties>
+
+    <dependencies>
+        <!-- No runtime dependencies — only JNI + Rust native library -->
+
+        <!-- Test only -->
+        <dependency>
+            <groupId>org.junit.jupiter</groupId>
+            <artifactId>junit-jupiter</artifactId>
+            <version>5.11.0</version>
+            <scope>test</scope>
+        </dependency>
+    </dependencies>
+
+    <build>
+        <plugins>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-compiler-plugin</artifactId>
+                <version>3.13.0</version>
+                <configuration>
+                    <source>${java.version}</source>
+                    <target>${java.version}</target>
+                </configuration>
+            </plugin>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-surefire-plugin</artifactId>
+                <version>3.5.0</version>
+                <configuration>
+                    <!-- Native lib is bundled in JAR; no java.library.path needed -->
+                </configuration>
+            </plugin>
+        </plugins>
+    </build>
+</project>

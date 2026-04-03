@@ -4,6 +4,8 @@ members = [
     "crates/veil-client",
     "crates/veil-server",
     "crates/veil-cli",
+    "crates/veil-python",
+    "crates/veil-jni",
 ]
 resolver = "2"
 
