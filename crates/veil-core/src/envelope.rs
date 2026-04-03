@@ -321,9 +321,15 @@ mod tests {
         };
         let chunk = base.as_chunk("stream-xyz".to_string(), 3, false);
         let headers = chunk.to_headers();
-        assert!(headers.iter().any(|(k, v)| k == "X-Veil-Stream-Id" && v == "stream-xyz"));
-        assert!(headers.iter().any(|(k, v)| k == "X-Veil-Chunk-Index" && v == "3"));
-        assert!(headers.iter().any(|(k, v)| k == "X-Veil-Final-Chunk" && v == "false"));
+        assert!(headers
+            .iter()
+            .any(|(k, v)| k == "X-Veil-Stream-Id" && v == "stream-xyz"));
+        assert!(headers
+            .iter()
+            .any(|(k, v)| k == "X-Veil-Chunk-Index" && v == "3"));
+        assert!(headers
+            .iter()
+            .any(|(k, v)| k == "X-Veil-Final-Chunk" && v == "false"));
     }
 
     #[test]
@@ -343,8 +349,12 @@ mod tests {
         };
         let fin = base.as_chunk("stream-xyz".to_string(), 9, true);
         let headers = fin.to_headers();
-        assert!(headers.iter().any(|(k, v)| k == "X-Veil-Final-Chunk" && v == "true"));
-        assert!(headers.iter().any(|(k, v)| k == "X-Veil-Chunk-Index" && v == "9"));
+        assert!(headers
+            .iter()
+            .any(|(k, v)| k == "X-Veil-Final-Chunk" && v == "true"));
+        assert!(headers
+            .iter()
+            .any(|(k, v)| k == "X-Veil-Chunk-Index" && v == "9"));
     }
 
     #[test]

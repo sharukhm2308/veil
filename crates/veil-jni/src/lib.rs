@@ -25,8 +25,8 @@ use base64::{engine::general_purpose::STANDARD as B64, Engine};
 use jni::objects::{JByteArray, JClass, JObject, JString};
 use jni::sys::{jbyteArray, jlong, jobject, jstring};
 use jni::JNIEnv;
+use veil_core::symmetric::{SymmetricEnvelope, SymmetricKey};
 use veil_core::{ClientSession, ServerSession, StaticKeyPair, VeilEnvelope};
-use veil_core::symmetric::{SymmetricKey, SymmetricEnvelope};
 
 // ---------------------------------------------------------------------------
 // Handle helpers — Box Rust objects as opaque long pointers for Java
@@ -319,7 +319,9 @@ pub extern "system" fn Java_com_ninjacart_veil_VeilClientSession_nativeDecryptRe
 
 /// Get the ephemeral public key (base64).
 #[no_mangle]
-pub extern "system" fn Java_com_ninjacart_veil_VeilClientSession_nativeEphemeralPublicBase64<'local>(
+pub extern "system" fn Java_com_ninjacart_veil_VeilClientSession_nativeEphemeralPublicBase64<
+    'local,
+>(
     env: JNIEnv<'local>,
     _class: JClass<'local>,
     handle: jlong,

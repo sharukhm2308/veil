@@ -6,6 +6,8 @@
 
 - [System Overview](#system-overview)
 - [Cryptographic Protocol](#cryptographic-protocol)
+  - [Asymmetric Path (ECDH + session keys)](#stage-1-x25519-ecdh-key-exchange-rfc-7748)
+  - [Symmetric Path (HKDF + master key)](#symmetric-encryption-path)
 - [Key Exchange Protocol](#key-exchange-protocol)
 - [Envelope Wire Format](#envelope-wire-format)
 - [Session Management](#session-management)
@@ -179,6 +181,99 @@ Each message is encrypted with AES-256-GCM using the appropriate directional key
 
 ---
 
+### Symmetric Encryption Path
+
+In addition to the asymmetric ECDH path, Veil provides a **symmetric encryption mode**
+for data-at-rest and service-to-service encryption where a pre-shared master key exists
+(e.g., stored in HashiCorp Vault KV).
+
+```
+  ┌───────────────────────────────────────────────────────────────┐
+  │              SYMMETRIC ENCRYPTION PIPELINE                     │
+  │                                                               │
+  │  ┌───────────────┐    ┌───────────────┐    ┌───────────────┐  │
+  │  │ Master Key    │    │  HKDF-SHA256  │    │  AES-256-GCM  │  │
+  │  │ (from Vault   │───▶│  Key          │───▶│  Authenticated│  │
+  │  │  KV or any    │    │  Derivation   │    │  Encryption   │  │
+  │  │  secret store)│    │               │    │               │  │
+  │  └───────────────┘    └───────────────┘    └───────────────┘  │
+  │                                                               │
+  │  Fetched once         RFC 5869             NIST SP 800-38D    │
+  │  at startup           Salt: "veil-         AEAD cipher        │
+  │                        symmetric-v1"       96-bit nonce       │
+  │                       Info: context        128-bit tag        │
+  │                        (e.g. user+conv)    AAD = context      │
+  └───────────────────────────────────────────────────────────────┘
+```
+
+#### Key Derivation with HKDF
+
+A single 256-bit master key is expanded into **context-specific derived keys** using
+HKDF-SHA256. Each unique context string produces a cryptographically independent key:
+
+```
+  master_key (32 bytes, from Vault KV)
+        │
+        ▼
+  ┌─────────────────────────────────────────────┐
+  │ HKDF-Extract                                │
+  │   salt = "veil-symmetric-v1"               │
+  │   IKM  = master_key                         │
+  │   PRK  = HMAC-SHA256(salt, IKM)             │
+  └──────────────────┬──────────────────────────┘
+                     │
+        ┌────────────┼────────────┐
+        ▼            ▼            ▼
+  ┌───────────┐ ┌───────────┐ ┌───────────┐
+  │  Expand   │ │  Expand   │ │  Expand   │
+  │  info =   │ │  info =   │ │  info =   │
+  │ "cw-u1-c1"│ │ "cw-u1-c2"│ │ "cw-u2-c1"│
+  └─────┬─────┘ └─────┬─────┘ └─────┬─────┘
+        ▼             ▼             ▼
+  ┌───────────┐ ┌───────────┐ ┌───────────┐
+  │  AES key  │ │  AES key  │ │  AES key  │
+  │  user1,   │ │  user1,   │ │  user2,   │
+  │  conv1    │ │  conv2    │ │  conv1    │
+  │ (32 bytes)│ │ (32 bytes)│ │ (32 bytes)│
+  └───────────┘ └───────────┘ └───────────┘
+```
+
+**Context isolation**: Compromising one derived key reveals nothing about the master
+key or any other derived key. The context is also passed as GCM AAD, providing
+**double-binding** — moving an envelope between contexts fails authentication.
+
+#### SymmetricEnvelope Wire Format
+
+```
+  ┌──────────────────────────────────────────────────────┐
+  │ SymmetricEnvelope                                    │
+  ├──────────────┬───────────────────────────────────────┤
+  │ version      │ u8 — format version (currently 1)     │
+  ├──────────────┼───────────────────────────────────────┤
+  │ nonce        │ [u8; 12] — AES-GCM nonce (random)     │
+  ├──────────────┼───────────────────────────────────────┤
+  │ ciphertext   │ Vec<u8> — encrypted payload + GCM tag │
+  ├──────────────┼───────────────────────────────────────┤
+  │ aad          │ Vec<u8> — context bytes (authenticated)│
+  ├──────────────┼───────────────────────────────────────┤
+  │ key_version  │ Option<u32> — master key version       │
+  │              │ (for key rotation support)             │
+  └──────────────┴───────────────────────────────────────┘
+```
+
+Serialization: JSON (`to_json()` / `from_json()`) and MessagePack (`to_msgpack()` / `from_msgpack()`).
+
+#### When to Use Which Path
+
+| Scenario | Path | Why |
+|----------|------|-----|
+| Client ↔ Server inference requests | **Asymmetric** | Forward secrecy, no pre-shared keys needed |
+| Message storage encryption | **Symmetric** | Pre-shared master key, no round-trips per message |
+| Credential/field-level encryption | **Symmetric** | Low-latency, context-bound per user/conversation |
+| Service-to-service payloads | **Symmetric** | Shared secret from Vault, deterministic key derivation |
+
+---
+
 ## Key Exchange Protocol
 
 The complete key exchange and encryption flow between client and server:
@@ -341,47 +436,49 @@ Transported alongside the envelope in HTTP headers (visible to middleware):
 ## Crate Architecture
 
 ```
-  ┌─────────────────────────────────────────────────────────┐
-  │                    Workspace Root                        │
-  │                    (Cargo.toml)                          │
-  └──────────────────────┬──────────────────────────────────┘
-                         │
-         ┌───────────────┼───────────────┬───────────────┐
-         ▼               ▼               ▼               ▼
-  ┌─────────────┐ ┌─────────────┐ ┌─────────────┐ ┌──────────┐
-  │ veil-core   │ │ veil-client │ │ veil-server │ │ veil-cli │
-  │             │ │             │ │             │ │          │
-  │ ┌─────────┐ │ │ Depends on  │ │ Depends on  │ │ Depends  │
-  │ │ keys.rs │ │ │ veil-core   │ │ veil-core   │ │ on all   │
-  │ │ kdf.rs  │ │ │             │ │             │ │          │
-  │ │cipher.rs│ │ │ ┌─────────┐ │ │ ┌─────────┐ │ │ Commands:│
-  │ │envelope │ │ │ │ proxy   │ │ │ │ server  │ │ │ keygen   │
-  │ │ .rs     │ │ │ │ config  │ │ │ │ handler │ │ │ encrypt  │
-  │ │session  │ │ │ └─────────┘ │ │ │ config  │ │ │ test     │
-  │ │ .rs     │ │ │             │ │ │ metrics │ │ │ proxy    │
-  │ │error.rs │ │ │ hyper +     │ │ └─────────┘ │ │ server   │
-  │ └─────────┘ │ │ reqwest     │ │             │ │          │
-  │             │ │             │ │ axum +      │ │ clap     │
-  │ Pure crypto │ │ HTTP proxy  │ │ reqwest     │ │          │
-  │ No I/O      │ │ layer       │ │ + prometheus│ │ CLI tool │
-  │ No async    │ │             │ │             │ │          │
-  └─────────────┘ └─────────────┘ └─────────────┘ └──────────┘
-        ▲               │               │               │
-        │               │               │               │
-        └───────────────┴───────────────┴───────────────┘
-                    all depend on veil-core
+  ┌──────────────────────────────────────────────────────────────────────┐
+  │                          Workspace Root (Cargo.toml)                 │
+  └──────────────────────────────┬───────────────────────────────────────┘
+                                 │
+     ┌──────────┬────────────────┼────────────────┬──────────┐
+     ▼          ▼                ▼                ▼          ▼
+  ┌────────┐ ┌────────┐ ┌─────────────┐ ┌──────────┐ ┌──────────────┐
+  │ veil-  │ │ veil-  │ │ veil-core   │ │ veil-cli │ │ SDK Bindings │
+  │ client │ │ server │ │             │ │          │ │              │
+  │        │ │        │ │ ┌─────────┐ │ │ Commands:│ │ ┌──────────┐ │
+  │ HTTP   │ │ Axum   │ │ │ keys    │ │ │ keygen   │ │ │veil-     │ │
+  │ proxy  │ │ server │ │ │ kdf     │ │ │ encrypt  │ │ │python    │ │
+  │ layer  │ │ shim   │ │ │ cipher  │ │ │ test     │ │ │(PyO3)    │ │
+  │        │ │        │ │ │ envelope│ │ │ proxy    │ │ └──────────┘ │
+  │ hyper +│ │ axum + │ │ │ session │ │ │ server   │ │ ┌──────────┐ │
+  │ reqwest│ │ reqwest│ │ │symmetric│ │ │          │ │ │veil-jni  │ │
+  │        │ │        │ │ │ error   │ │ │ clap     │ │ │(JNI)     │ │
+  └────┬───┘ └────┬───┘ │ └─────────┘ │ └────┬─────┘ │ └──────────┘ │
+       │          │     │             │      │       └──────┬───────┘
+       │          │     │ Pure crypto │      │              │
+       │          │     │ No I/O      │      │              │
+       │          │     │ No async    │      │              │
+       │          │     └──────┬──────┘      │              │
+       │          │            ▲              │              │
+       └──────────┴────────────┴──────────────┴──────────────┘
+                       all depend on veil-core
 ```
 
 ### Dependency Design Principles
 
 1. **`veil-core` is pure cryptography** — no I/O, no async, no networking. This makes
-   it ideal for FFI binding to other languages.
+   it ideal for FFI binding to other languages. Contains both asymmetric (ECDH session)
+   and symmetric (HKDF master key) encryption paths.
 2. **`veil-client` handles HTTP proxying** — uses hyper for the proxy server and
    reqwest for upstream calls.
 3. **`veil-server` handles HTTP serving** — uses axum with tower middleware for
    production-grade request handling.
 4. **`veil-cli` is the user-facing binary** — thin wrapper that orchestrates the
    other crates via clap commands.
+5. **`veil-python` (PyO3)** — native Python extension module exposing both asymmetric
+   and symmetric APIs as Python classes. Built with `maturin`.
+6. **`veil-jni` + `veil-java`** — JNI native library with a Java SDK layer.
+   Uses handle-based opaque pointers (`Box::into_raw` → `jlong`) for safe lifecycle management.
 
 ---
 
@@ -435,23 +532,67 @@ logic lives in `veil-core` (Rust), and every language SDK is a thin FFI wrapper 
 
 ### SDK Binding Technologies
 
-#### Phase 2: Python SDK (PyO3)
+#### Python SDK (PyO3) — Implemented
 
 ```
-  Python app  →  import veil  →  PyO3 bindings  →  veil-core (Rust)
+  Python app  →  import veil_sdk  →  PyO3 bindings  →  veil-core (Rust)
 ```
 
 [PyO3](https://pyo3.rs/) generates native Python extension modules from Rust code.
-The Python SDK exposes `VeilSession`, `encrypt_request()`, and `decrypt_response()`
-as native Python classes — no subprocess, no HTTP, no overhead.
+The Python SDK exposes both asymmetric and symmetric APIs as native Python classes —
+no subprocess, no HTTP, no overhead.
 
+**Asymmetric (session-based):**
 ```python
-# Future Python SDK usage
-from veil import VeilSession
+from veil_sdk import VeilKeyPair, VeilClientSession, VeilServerSession
 
-session = VeilSession(server_public_key="<b64>", key_id="prod-v2")
-envelope, headers = session.encrypt_request(prompt_bytes, model="gpt-4")
-plaintext = session.decrypt_response(response_bytes)
+# Server generates a key pair
+server_kp = VeilKeyPair.generate()
+
+# Client encrypts
+client = VeilClientSession(server_kp.public_base64(), "key-1")
+envelope = client.encrypt_request(b'{"prompt": "hello"}', "gpt-4", 100)
+
+# Server decrypts
+server = VeilServerSession(
+    server_kp.secret_base64(), client.ephemeral_public_base64(),
+    "key-1", envelope.request_id, envelope.timestamp
+)
+plaintext = server.decrypt_request(envelope.to_json())
+```
+
+**Symmetric (master-key-based):**
+```python
+from veil_sdk import VeilSymmetricKey
+
+# Derive a context-specific key from a master key
+master = VeilSymmetricKey.generate()
+derived = master.derive(b"user-123-conversation-456")
+
+# Encrypt/decrypt
+envelope = derived.encrypt(b"secret message", b"user-123-conversation-456")
+plaintext = derived.decrypt(envelope)
+```
+
+#### Java SDK (JNI) — Implemented
+
+```
+  Java app  →  VeilSymmetricKey.generate()  →  JNI  →  libveil_jni  →  veil-core
+```
+
+The Java SDK uses handle-based opaque pointers for safe native memory management.
+All key classes implement `AutoCloseable` for deterministic cleanup.
+
+```java
+import com.ninjacart.veil.VeilSymmetricKey;
+
+try (VeilSymmetricKey master = VeilSymmetricKey.generate()) {
+    try (VeilSymmetricKey derived = master.derive("user-123-conv-456".getBytes())) {
+        byte[] context = "user-123-conv-456".getBytes();
+        var envelope = derived.encrypt("secret".getBytes(), context);
+        byte[] plaintext = derived.decrypt(envelope);
+    }
+}
 ```
 
 #### Phase 3: JavaScript/TypeScript SDK (NAPI-RS + WASM)
@@ -601,6 +742,8 @@ this by encrypting each SSE chunk independently:
 
 ### Cryptographic Constants
 
+#### Asymmetric Path
+
 ```
   HKDF Salt:     "veil-e2e-llm-v1"   (15 bytes)
   C2S Info:      "veil-c2s"           (8 bytes)
@@ -613,7 +756,20 @@ this by encrypting each SSE chunk independently:
   X25519 Key:    256 bits             (32 bytes)
 ```
 
+#### Symmetric Path
+
+```
+  HKDF Salt:     "veil-symmetric-v1"  (17 bytes)
+  HKDF Info:     caller-supplied context (variable length)
+  AES Key Size:  256 bits             (32 bytes)
+  GCM Nonce:     96 bits              (12 bytes)
+  GCM Tag:       128 bits             (16 bytes)
+  GCM AAD:       context bytes        (same as HKDF info — double-binding)
+```
+
 ### Test Coverage Summary
+
+#### Rust Tests (94 total)
 
 | Category | Tests | What They Verify |
 |----------|:-----:|------------------|
@@ -622,7 +778,30 @@ this by encrypting each SSE chunk independently:
 | Unit (keys) | 5 | Generation, roundtrip, ECDH, parsing |
 | Unit (kdf) | 2 | Key derivation, different secrets |
 | Unit (session) | 4 | Full roundtrip, cross-session, large prompt, headers |
-| Integration | 7 | E2E roundtrip, tampering, wrong keys, large payloads |
-| Security | 6 | Nonce uniqueness, ciphertext indistinguishability, key randomness |
-| Doc tests | 1 | Library usage example compiles and runs |
-| **Total** | **36** | |
+| Unit (symmetric) | 15 | Key gen, HKDF derive, encrypt/decrypt, versioned, base64, envelope serialization |
+| Unit (streaming) | 16 | Chunk encrypt/decrypt, ordering, final sentinel |
+| Integration | 18 | E2E roundtrip, tamper detection, large payloads, symmetric roundtrip, context isolation, cross-user isolation, asymmetric+symmetric pipeline |
+| Security | 16 | Nonce uniqueness, ciphertext indistinguishability, key randomness, zeroize-on-drop, AAD authentication, symmetric nonce uniqueness, symmetric key material validation |
+| Doc tests | 7 | Library usage examples compile and run |
+| **Rust Total** | **94** | |
+
+#### Python SDK Tests (56 total)
+
+| Class | Tests | What They Verify |
+|-------|:-----:|------------------|
+| TestVeilKeyPair | 5 | Key generation, base64 roundtrip, uniqueness |
+| TestAsymmetricEncryption | 9 | Full session roundtrip, wrong key rejection, tamper detection |
+| TestVeilEnvelope | 5 | JSON/MessagePack serialization, field access |
+| TestVeilMetadata | 4 | Metadata construction, header generation |
+| TestVeilSymmetricKey | 19 | Generate, from_bytes, from_base64, derive, encrypt/decrypt, versioned, context isolation |
+| TestVeilSymmetricEnvelope | 8 | Field access, properties, JSON roundtrip |
+| TestSymmetricInterop | 4 | Cross-key isolation, key determinism |
+| TestModuleFunctions | 2 | Module-level API availability |
+
+#### Java SDK Tests (43 total)
+
+| Class | Tests | What They Verify |
+|-------|:-----:|------------------|
+| VeilSymmetricKeyTest | 22 | Generate, derive, encrypt/decrypt, versioned, base64 roundtrip, wrong key rejection, handle lifecycle |
+| VeilSymmetricEnvelopeTest | 8 | Construction, toMap/fromMap, field access |
+| VeilAsymmetricTest | 13 | Key pair generation, session roundtrip, wrong key, tamper detection |

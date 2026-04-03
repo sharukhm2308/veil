@@ -23,8 +23,14 @@ fn test_full_e2e_roundtrip() {
     assert!(!metadata.timestamp.is_empty());
     assert!(!metadata.request_id.is_empty());
 
-    let server_session = ServerSession::new(&server_kp, &metadata.ephemeral_key, "test-key", &metadata.request_id, &metadata.timestamp)
-        .expect("Failed to create server session");
+    let server_session = ServerSession::new(
+        &server_kp,
+        &metadata.ephemeral_key,
+        "test-key",
+        &metadata.request_id,
+        &metadata.timestamp,
+    )
+    .expect("Failed to create server session");
 
     let decrypted = server_session
         .decrypt_request(&envelope)
@@ -47,8 +53,10 @@ fn test_different_sessions_produce_different_ciphertext() {
     let server_kp = StaticKeyPair::generate();
     let server_pub = server_kp.public_base64();
 
-    let mut session_a = ClientSession::new(&server_pub, "key-1").expect("Failed to create session A");
-    let mut session_b = ClientSession::new(&server_pub, "key-1").expect("Failed to create session B");
+    let mut session_a =
+        ClientSession::new(&server_pub, "key-1").expect("Failed to create session A");
+    let mut session_b =
+        ClientSession::new(&server_pub, "key-1").expect("Failed to create session B");
 
     let prompt = b"secret prompt";
 
@@ -80,8 +88,14 @@ fn test_cross_session_decryption_works() {
         .expect("Failed to encrypt");
 
     // Server creates session from the ephemeral key
-    let server_session = ServerSession::new(&server_kp, &meta.ephemeral_key, "key-1", &meta.request_id, &meta.timestamp)
-        .expect("Failed to create server session");
+    let server_session = ServerSession::new(
+        &server_kp,
+        &meta.ephemeral_key,
+        "key-1",
+        &meta.request_id,
+        &meta.timestamp,
+    )
+    .expect("Failed to create server session");
 
     let decrypted = server_session
         .decrypt_request(&envelope)
@@ -103,8 +117,14 @@ fn test_large_payload_e2e() {
         .encrypt_request(&large_prompt, "gpt-4-turbo", Some(50000))
         .expect("Failed to encrypt large payload");
 
-    let server_session = ServerSession::new(&server_kp, &metadata.ephemeral_key, "key-1", &metadata.request_id, &metadata.timestamp)
-        .expect("Failed to create server session");
+    let server_session = ServerSession::new(
+        &server_kp,
+        &metadata.ephemeral_key,
+        "key-1",
+        &metadata.request_id,
+        &metadata.timestamp,
+    )
+    .expect("Failed to create server session");
 
     let decrypted = server_session
         .decrypt_request(&envelope)
@@ -129,8 +149,14 @@ fn test_tampered_ciphertext_rejected() {
         *byte ^= 0xFF;
     }
 
-    let server_session = ServerSession::new(&server_kp, &metadata.ephemeral_key, "key-1", &metadata.request_id, &metadata.timestamp)
-        .expect("Failed to create server session");
+    let server_session = ServerSession::new(
+        &server_kp,
+        &metadata.ephemeral_key,
+        "key-1",
+        &metadata.request_id,
+        &metadata.timestamp,
+    )
+    .expect("Failed to create server session");
 
     assert!(
         server_session.decrypt_request(&envelope).is_err(),
@@ -154,8 +180,14 @@ fn test_tampered_nonce_rejected() {
         *byte ^= 0xFF;
     }
 
-    let server_session = ServerSession::new(&server_kp, &metadata.ephemeral_key, "key-1", &metadata.request_id, &metadata.timestamp)
-        .expect("Failed to create server session");
+    let server_session = ServerSession::new(
+        &server_kp,
+        &metadata.ephemeral_key,
+        "key-1",
+        &metadata.request_id,
+        &metadata.timestamp,
+    )
+    .expect("Failed to create server session");
 
     assert!(
         server_session.decrypt_request(&envelope).is_err(),
@@ -175,8 +207,14 @@ fn test_wrong_server_key_rejected() {
         .encrypt_request(b"secret", "model", None)
         .expect("Failed to encrypt");
 
-    let wrong_session = ServerSession::new(&server_kp_fake, &metadata.ephemeral_key, "key-1", &metadata.request_id, &metadata.timestamp)
-        .expect("Failed to create server session");
+    let wrong_session = ServerSession::new(
+        &server_kp_fake,
+        &metadata.ephemeral_key,
+        "key-1",
+        &metadata.request_id,
+        &metadata.timestamp,
+    )
+    .expect("Failed to create server session");
 
     assert!(
         wrong_session.decrypt_request(&envelope).is_err(),
@@ -210,7 +248,8 @@ fn test_encrypt_decrypt_chunk_roundtrip() {
         &meta.key_id,
         &meta.request_id,
         &meta.timestamp,
-    ).expect("ServerSession::new failed");
+    )
+    .expect("ServerSession::new failed");
     // Server decrypts chunk with correct stream position
     let decrypted = server
         .decrypt_chunk(&envelope, stream_id, chunk_index, is_final)
@@ -233,10 +272,14 @@ fn test_decrypt_chunk_rejects_wrong_index() {
         &meta.key_id,
         &meta.request_id,
         &meta.timestamp,
-    ).expect("server session failed");
+    )
+    .expect("server session failed");
     // Attempt to decrypt as chunk index 1 (wrong!) must fail
     let result = server.decrypt_chunk(&envelope, "stream-1", 1, false);
-    assert!(result.is_err(), "Should reject chunk with wrong index — reorder attack detected");
+    assert!(
+        result.is_err(),
+        "Should reject chunk with wrong index — reorder attack detected"
+    );
 }
 
 // ===========================================================================
@@ -254,7 +297,10 @@ fn test_symmetric_full_roundtrip() {
     let envelope = key.encrypt(plaintext, aad).expect("encrypt failed");
     let decrypted = key.decrypt(&envelope).expect("decrypt failed");
 
-    assert_eq!(decrypted, plaintext, "plaintext must survive encrypt-decrypt roundtrip");
+    assert_eq!(
+        decrypted, plaintext,
+        "plaintext must survive encrypt-decrypt roundtrip"
+    );
 }
 
 #[test]
@@ -267,13 +313,18 @@ fn test_symmetric_derive_interop() {
     // "Agent" side derives and encrypts
     let agent_key = SymmetricKey::derive(&master, context).expect("agent derive");
     let plaintext = b"{\"action\":\"route\",\"payload\":\"sensitive\"}";
-    let envelope = agent_key.encrypt(plaintext, context).expect("agent encrypt");
+    let envelope = agent_key
+        .encrypt(plaintext, context)
+        .expect("agent encrypt");
 
     // "Relay" side derives independently and decrypts
     let relay_key = SymmetricKey::derive(&master, context).expect("relay derive");
     let decrypted = relay_key.decrypt(&envelope).expect("relay decrypt");
 
-    assert_eq!(decrypted, plaintext, "relay must decrypt what agent encrypted");
+    assert_eq!(
+        decrypted, plaintext,
+        "relay must decrypt what agent encrypted"
+    );
 }
 
 #[test]
@@ -292,7 +343,10 @@ fn test_symmetric_large_payload() {
     let restored = SymmetricEnvelope::from_json(&json).expect("from_json");
 
     let decrypted = key.decrypt(&restored).expect("decrypt 1MB");
-    assert_eq!(decrypted, plaintext, "1MB payload must survive full roundtrip");
+    assert_eq!(
+        decrypted, plaintext,
+        "1MB payload must survive full roundtrip"
+    );
 }
 
 #[test]
@@ -301,7 +355,9 @@ fn test_symmetric_versioned_roundtrip() {
     let plaintext = b"versioned integration test data";
     let aad = b"ver-integration-ctx";
 
-    let envelope = key.encrypt_versioned(plaintext, aad, 2).expect("encrypt_versioned");
+    let envelope = key
+        .encrypt_versioned(plaintext, aad, 2)
+        .expect("encrypt_versioned");
     assert_eq!(
         envelope.key_version,
         Some(2),
@@ -401,7 +457,8 @@ fn test_symmetric_with_asymmetric_pipeline() {
         ClientSession::new(&server_pub, "meridian-key").expect("client session");
 
     // Step 1: Client encrypts request with asymmetric encryption
-    let prompt = b"{\"model\":\"gpt-4\",\"messages\":[{\"role\":\"user\",\"content\":\"What is Veil?\"}]}";
+    let prompt =
+        b"{\"model\":\"gpt-4\",\"messages\":[{\"role\":\"user\",\"content\":\"What is Veil?\"}]}";
     let (request_envelope, metadata) = client_session
         .encrypt_request(prompt, "gpt-4", Some(20))
         .expect("encrypt request");
@@ -444,7 +501,8 @@ fn test_symmetric_with_asymmetric_pipeline() {
     assert_eq!(loaded_prompt, prompt);
 
     // Step 5: Server encrypts response with asymmetric and sends to client
-    let response = b"{\"choices\":[{\"message\":{\"content\":\"Veil is an encryption library.\"}}]}";
+    let response =
+        b"{\"choices\":[{\"message\":{\"content\":\"Veil is an encryption library.\"}}]}";
     let response_envelope = server_session
         .encrypt_response(response)
         .expect("encrypt response");

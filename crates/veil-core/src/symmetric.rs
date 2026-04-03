@@ -84,8 +84,8 @@
 //! preserving the same security model (Vault still guards the master key).
 
 use hkdf::Hkdf;
-use sha2::Sha256;
 use serde::{Deserialize, Serialize};
+use sha2::Sha256;
 use zeroize::{Zeroize, ZeroizeOnDrop};
 
 use crate::cipher;
@@ -158,11 +158,13 @@ impl SymmetricKey {
     /// ```
     pub fn from_base64(b64: &str) -> VeilResult<Self> {
         use base64::{engine::general_purpose::STANDARD as B64, Engine};
-        let bytes = B64.decode(b64)
+        let bytes = B64
+            .decode(b64)
             .map_err(|e| VeilError::InvalidInput(format!("invalid base64: {e}")))?;
         if bytes.len() != 32 {
             return Err(VeilError::InvalidInput(format!(
-                "key must be 32 bytes, got {}", bytes.len()
+                "key must be 32 bytes, got {}",
+                bytes.len()
             )));
         }
         let mut key = [0u8; 32];
@@ -183,7 +185,9 @@ impl SymmetricKey {
     /// assert_ne!(k1.as_bytes(), k2.as_bytes()); // unique with overwhelming probability
     /// ```
     pub fn generate() -> Self {
-        Self { key: cipher::generate_key() }
+        Self {
+            key: cipher::generate_key(),
+        }
     }
 
     /// Derive a context-specific key from a master key via HKDF-SHA256.
@@ -234,7 +238,7 @@ impl SymmetricKey {
     /// Export as base64 string.
     pub fn to_base64(&self) -> String {
         use base64::{engine::general_purpose::STANDARD as B64, Engine};
-        B64.encode(&self.key)
+        B64.encode(self.key)
     }
 
     /// Encrypt plaintext with AES-256-GCM.
@@ -315,7 +319,12 @@ impl SymmetricKey {
     ///   tampered ciphertext, or mismatched AAD).
     pub fn decrypt(&self, envelope: &SymmetricEnvelope) -> VeilResult<Vec<u8>> {
         envelope.validate()?;
-        cipher::decrypt(&self.key, &envelope.nonce, &envelope.ciphertext, &envelope.aad)
+        cipher::decrypt(
+            &self.key,
+            &envelope.nonce,
+            &envelope.ciphertext,
+            &envelope.aad,
+        )
     }
 }
 
@@ -391,8 +400,7 @@ impl SymmetricEnvelope {
     /// # Errors
     /// Returns [`VeilError::Envelope`] if serialization fails.
     pub fn to_json(&self) -> VeilResult<String> {
-        serde_json::to_string(self)
-            .map_err(|e| VeilError::Envelope(format!("json serialize: {e}")))
+        serde_json::to_string(self).map_err(|e| VeilError::Envelope(format!("json serialize: {e}")))
     }
 
     /// Deserialize from a JSON string and validate the version.
@@ -415,8 +423,7 @@ impl SymmetricEnvelope {
     /// # Errors
     /// Returns [`VeilError::Envelope`] if serialization fails.
     pub fn to_msgpack(&self) -> VeilResult<Vec<u8>> {
-        rmp_serde::to_vec(self)
-            .map_err(|e| VeilError::Envelope(format!("msgpack serialize: {e}")))
+        rmp_serde::to_vec(self).map_err(|e| VeilError::Envelope(format!("msgpack serialize: {e}")))
     }
 
     /// Deserialize from MessagePack bytes and validate the version.

@@ -174,8 +174,7 @@ mod tests {
         let standard_keys = SessionKeys::derive(&static_shared).unwrap();
 
         assert_ne!(
-            prekey_keys.client_to_server,
-            standard_keys.client_to_server,
+            prekey_keys.client_to_server, standard_keys.client_to_server,
             "Prekey session keys must differ from standard session keys"
         );
     }

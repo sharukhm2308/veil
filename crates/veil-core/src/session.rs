@@ -66,7 +66,6 @@ impl ClientSession {
         })
     }
 
-
     /// Create a client session using dual-DH for true forward secrecy.
     ///
     /// Uses both server static key and a one-time prekey. An attacker who later
@@ -187,10 +186,16 @@ impl ClientSession {
         let extended_aad = format!(
             "{}-stream-{}-chunk-{}-final-{}",
             String::from_utf8_lossy(&base_aad),
-            stream_id, chunk_index, is_final
-        ).into_bytes();
-        let (nonce, ciphertext) =
-            cipher::encrypt(&self.session_keys.client_to_server, plaintext, &extended_aad)?;
+            stream_id,
+            chunk_index,
+            is_final
+        )
+        .into_bytes();
+        let (nonce, ciphertext) = cipher::encrypt(
+            &self.session_keys.client_to_server,
+            plaintext,
+            &extended_aad,
+        )?;
         let envelope = VeilEnvelope::new(nonce, ciphertext, extended_aad);
         let base_meta = VeilMetadata {
             version: PROTOCOL_VERSION,
@@ -225,8 +230,12 @@ impl ClientSession {
         // ciphertext substitution even within the replay window.
         format!(
             "veil-v{}-{}-{}-{}-{}-{}",
-            PROTOCOL_VERSION, dir_tag, self.server_key_id,
-            ephemeral_public_b64, self.request_id, self.timestamp
+            PROTOCOL_VERSION,
+            dir_tag,
+            self.server_key_id,
+            ephemeral_public_b64,
+            self.request_id,
+            self.timestamp
         )
         .into_bytes()
     }
@@ -272,7 +281,6 @@ impl ServerSession {
             timestamp: timestamp.to_string(),
         })
     }
-
 
     /// Create a server session using dual-DH with a one-time prekey.
     ///
@@ -336,8 +344,11 @@ impl ServerSession {
         let expected_aad = format!(
             "{}-stream-{}-chunk-{}-final-{}",
             String::from_utf8_lossy(&base_aad),
-            stream_id, chunk_index, is_final
-        ).into_bytes();
+            stream_id,
+            chunk_index,
+            is_final
+        )
+        .into_bytes();
         if envelope.aad != expected_aad {
             return Err(VeilError::Decryption(
                 "Chunk AAD mismatch â stream_id, chunk_index, or is_final tampered".into(),
@@ -367,8 +378,12 @@ impl ServerSession {
         };
         format!(
             "veil-v{}-{}-{}-{}-{}-{}",
-            PROTOCOL_VERSION, dir_tag, self.key_id,
-            self.ephemeral_public_b64, self.request_id, self.timestamp
+            PROTOCOL_VERSION,
+            dir_tag,
+            self.key_id,
+            self.ephemeral_public_b64,
+            self.request_id,
+            self.timestamp
         )
         .into_bytes()
     }
@@ -402,8 +417,14 @@ mod tests {
         assert!(!metadata.request_id.is_empty());
 
         // Server creates session from client's ephemeral key
-        let server_session =
-            ServerSession::new(&server_kp, &metadata.ephemeral_key, "key-001", &metadata.request_id, &metadata.timestamp).unwrap();
+        let server_session = ServerSession::new(
+            &server_kp,
+            &metadata.ephemeral_key,
+            "key-001",
+            &metadata.request_id,
+            &metadata.timestamp,
+        )
+        .unwrap();
 
         // Server decrypts the request
         let decrypted_prompt = server_session.decrypt_request(&envelope).unwrap();
@@ -429,8 +450,14 @@ mod tests {
         let (envelope, _metadata) = session1.encrypt_request(b"secret", "gpt-4", None).unwrap();
 
         // session2 has different ephemeral key → different shared secret
-        let server_session2 =
-            ServerSession::new(&server_kp, &session2.ephemeral_public_base64(), "key-001", "test-req-id", "2026-01-01T00:00:00Z").unwrap();
+        let server_session2 = ServerSession::new(
+            &server_kp,
+            &session2.ephemeral_public_base64(),
+            "key-001",
+            "test-req-id",
+            "2026-01-01T00:00:00Z",
+        )
+        .unwrap();
 
         // Should fail to decrypt with wrong session
         assert!(server_session2.decrypt_request(&envelope).is_err());
@@ -447,8 +474,14 @@ mod tests {
             .encrypt_request(&large_prompt, "claude-3", Some(25000))
             .unwrap();
 
-        let server_session =
-            ServerSession::new(&server_kp, &metadata.ephemeral_key, "key-001", &metadata.request_id, &metadata.timestamp).unwrap();
+        let server_session = ServerSession::new(
+            &server_kp,
+            &metadata.ephemeral_key,
+            "key-001",
+            &metadata.request_id,
+            &metadata.timestamp,
+        )
+        .unwrap();
         let decrypted = server_session.decrypt_request(&envelope).unwrap();
 
         assert_eq!(decrypted, large_prompt);
@@ -457,7 +490,8 @@ mod tests {
     #[test]
     fn test_metadata_headers() {
         let server_kp = StaticKeyPair::generate();
-        let mut client_session = ClientSession::new(&server_kp.public_base64(), "prod-key-v2").unwrap();
+        let mut client_session =
+            ClientSession::new(&server_kp.public_base64(), "prod-key-v2").unwrap();
 
         let (_, metadata) = client_session
             .encrypt_request(b"test", "claude-3-opus", Some(42))
@@ -489,8 +523,14 @@ mod tests {
             .unwrap();
 
         // Server uses a DIFFERENT key_id → AAD mismatch
-        let server_session =
-            ServerSession::new(&server_kp, &metadata.ephemeral_key, "wrong-key-id", &metadata.request_id, &metadata.timestamp).unwrap();
+        let server_session = ServerSession::new(
+            &server_kp,
+            &metadata.ephemeral_key,
+            "wrong-key-id",
+            &metadata.request_id,
+            &metadata.timestamp,
+        )
+        .unwrap();
 
         let result = server_session.decrypt_request(&envelope);
         assert!(
@@ -510,9 +550,11 @@ mod tests {
 
         // Verify the timestamp is valid ISO 8601
         let parsed = chrono::DateTime::parse_from_rfc3339(&metadata.timestamp);
-        assert!(parsed.is_ok(), "Timestamp should be valid RFC 3339/ISO 8601");
+        assert!(
+            parsed.is_ok(),
+            "Timestamp should be valid RFC 3339/ISO 8601"
+        );
     }
-
 
     #[test]
     fn test_prekey_roundtrip_true_forward_secrecy() {
@@ -528,7 +570,8 @@ mod tests {
             &prekey_pub_b64,
             "key-001",
             &server_prekey.key_id,
-        ).unwrap();
+        )
+        .unwrap();
 
         assert_eq!(client_session.prekey_id, Some("prekey-001".into()));
 
@@ -546,7 +589,8 @@ mod tests {
             "key-001",
             &metadata.request_id,
             &metadata.timestamp,
-        ).unwrap();
+        )
+        .unwrap();
 
         let decrypted = server_session.decrypt_request(&envelope).unwrap();
         assert_eq!(decrypted, prompt);
@@ -571,7 +615,8 @@ mod tests {
             &prekey_pub_b64,
             "key-001",
             &server_prekey.key_id,
-        ).unwrap();
+        )
+        .unwrap();
 
         let (envelope, metadata) = client_prekey
             .encrypt_request(b"prekey secret", "gpt-4", None)
@@ -584,7 +629,8 @@ mod tests {
             "key-001",
             &metadata.request_id,
             &metadata.timestamp,
-        ).unwrap();
+        )
+        .unwrap();
 
         assert!(
             standard_session.decrypt_request(&envelope).is_err(),
@@ -604,7 +650,8 @@ mod tests {
             &BASE64.encode(prekey.public.as_bytes()),
             "key-001",
             &prekey.key_id,
-        ).unwrap();
+        )
+        .unwrap();
 
         let (_, metadata) = client_session
             .encrypt_request(b"test", "gpt-4", None)
@@ -612,7 +659,9 @@ mod tests {
 
         let headers = metadata.to_headers();
         assert!(
-            headers.iter().any(|(k, v)| k == "X-Veil-Prekey-Id" && v == "pk-header-test"),
+            headers
+                .iter()
+                .any(|(k, v)| k == "X-Veil-Prekey-Id" && v == "pk-header-test"),
             "X-Veil-Prekey-Id header must be present in prekey sessions"
         );
     }

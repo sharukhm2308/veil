@@ -133,8 +133,6 @@ pub fn parse_public_key(b64: &str) -> VeilResult<PublicKey> {
     Ok(PublicKey::from(arr))
 }
 
-
-
 /// A one-time prekey pair for true forward secrecy.
 /// Server generates a pool of these; each is used exactly once then deleted.
 /// Compromise of the server static key after session completion cannot
@@ -153,7 +151,11 @@ impl PreKeyPair {
     pub fn generate(key_id: String) -> Self {
         let secret = StaticSecret::random_from_rng(OsRng);
         let public = PublicKey::from(&secret);
-        Self { secret, public, key_id }
+        Self {
+            secret,
+            public,
+            key_id,
+        }
     }
 
     /// Perform ECDH with a peer public key, consuming the prekey secret.

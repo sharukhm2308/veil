@@ -124,7 +124,10 @@ fn test_chunk_stream_id_binding_prevents_stream_swap() {
     // Decryption with tampered AAD must fail — GCM tag mismatch
     let key = cipher::generate_key(); // wrong key anyway, but proves AAD path
     let result = cipher::decrypt(&key, &envelope.nonce, &envelope.ciphertext, &tampered_aad);
-    assert!(result.is_err(), "Decryption should fail with tampered stream_id in AAD");
+    assert!(
+        result.is_err(),
+        "Decryption should fail with tampered stream_id in AAD"
+    );
 }
 
 #[test]
@@ -156,7 +159,10 @@ fn test_chunk_index_binding_prevents_reorder() {
     // Cross-decryption must fail: chunk-0 ciphertext with chunk-1 AAD
     let key = cipher::generate_key();
     let cross = cipher::decrypt(&key, &env0.nonce, &env0.ciphertext, &env1.aad);
-    assert!(cross.is_err(), "Cross-index decryption must fail — chunk reordering detected");
+    assert!(
+        cross.is_err(),
+        "Cross-index decryption must fail — chunk reordering detected"
+    );
 }
 
 // ===========================================================================
@@ -248,7 +254,11 @@ fn test_symmetric_zeroize_on_drop() {
 
     let mut key = SymmetricKey::generate();
     // Verify key is non-zero before zeroize
-    assert_ne!(key.as_bytes(), &[0u8; 32], "generated key must not be all zeros");
+    assert_ne!(
+        key.as_bytes(),
+        &[0u8; 32],
+        "generated key must not be all zeros"
+    );
 
     key.zeroize();
     assert_eq!(

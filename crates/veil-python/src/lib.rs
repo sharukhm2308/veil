@@ -27,10 +27,10 @@ use base64::{engine::general_purpose::STANDARD as B64, Engine};
 use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
 use pyo3::types::PyDict;
+use veil_core::symmetric::{SymmetricEnvelope, SymmetricKey};
 use veil_core::{
     ClientSession, ServerSession, StaticKeyPair, VeilEnvelope, VeilError, VeilMetadata,
 };
-use veil_core::symmetric::{SymmetricEnvelope, SymmetricKey};
 
 // --------------------------------------------------------------------------
 // Error conversion: VeilError → PyErr
@@ -404,8 +404,7 @@ impl PyServerSession {
         request_id: &str,
         timestamp: &str,
     ) -> PyResult<Self> {
-        let keypair =
-            StaticKeyPair::from_secret_base64(secret_key_b64).map_err(to_py_err)?;
+        let keypair = StaticKeyPair::from_secret_base64(secret_key_b64).map_err(to_py_err)?;
         let inner = ServerSession::new(
             &keypair,
             client_ephemeral_b64,
@@ -509,10 +508,7 @@ impl PyStaticKeyPair {
     }
 
     fn __repr__(&self) -> String {
-        format!(
-            "VeilKeyPair(public='{}')",
-            &self.inner.public_base64()[..8]
-        )
+        format!("VeilKeyPair(public='{}')", &self.inner.public_base64()[..8])
     }
 }
 
@@ -710,12 +706,15 @@ impl PySymmetricKey {
     fn from_bytes(raw: &[u8]) -> PyResult<Self> {
         if raw.len() != 32 {
             return Err(PyValueError::new_err(format!(
-                "key must be 32 bytes, got {}", raw.len()
+                "key must be 32 bytes, got {}",
+                raw.len()
             )));
         }
         let mut bytes = [0u8; 32];
         bytes.copy_from_slice(raw);
-        Ok(Self { inner: SymmetricKey::from_bytes(bytes) })
+        Ok(Self {
+            inner: SymmetricKey::from_bytes(bytes),
+        })
     }
 
     /// Create from a base64-encoded key string.
