@@ -1,4 +1,4 @@
-package com.ninjacart.veil;
+package io.veil;
 
 /**
  * Server-side Veil session for decrypting requests and encrypting responses.

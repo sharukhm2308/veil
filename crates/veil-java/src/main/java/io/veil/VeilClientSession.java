@@ -1,4 +1,4 @@
-package com.ninjacart.veil;
+package io.veil;
 
 import java.util.Base64;
 

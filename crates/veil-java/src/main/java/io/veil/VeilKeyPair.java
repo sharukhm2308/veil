@@ -1,4 +1,4 @@
-package com.ninjacart.veil;
+package io.veil;
 
 /**
  * X25519 static keypair for server identity in the Veil protocol.
@@ -15,13 +15,13 @@ package com.ninjacart.veil;
  * <h3>Generate and persist:</h3>
  * <pre>{@code
  * VeilKeyPair kp = VeilKeyPair.generate();
- * String secretB64 = kp.secretBase64();   // store in Vault / HSM
+ * String secretB64 = kp.secretBase64();   // store in a secrets manager
  * String publicB64 = kp.publicBase64();   // distribute to clients
  * }</pre>
  *
  * <h3>Reconstruct from stored secret:</h3>
  * <pre>{@code
- * String secretB64 = vaultClient.readSecret("veil/server-key");
+ * String secretB64 = secretStore.load("veil/server-key");
  * VeilKeyPair kp = VeilKeyPair.fromSecretBase64(secretB64);
  * // kp.publicBase64() is deterministically derived from the secret
  * }</pre>
@@ -84,8 +84,8 @@ public class VeilKeyPair {
     /**
      * Get the secret (private) key as a base64-encoded string.
      *
-     * <p><strong>Security:</strong> This value must be stored securely (e.g., in
-     * Vault, AWS Secrets Manager, or an HSM). Never log or expose it.
+     * <p><strong>Security:</strong> This value must be stored securely in a
+     * hardened secrets manager. Never log or expose it.
      *
      * @return Base64-encoded 32-byte X25519 secret key
      */

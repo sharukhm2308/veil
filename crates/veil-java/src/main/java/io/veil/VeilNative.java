@@ -1,4 +1,4 @@
-package com.ninjacart.veil;
+package io.veil;
 
 import java.io.File;
 import java.io.IOException;

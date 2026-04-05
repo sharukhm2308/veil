@@ -275,7 +275,7 @@ plaintext = derived.decrypt(encrypted)
 ### Java SDK Usage
 
 ```java
-import com.ninjacart.veil.VeilSymmetricKey;
+import io.veil.VeilSymmetricKey;
 
 // Symmetric encryption with AutoCloseable lifecycle
 try (VeilSymmetricKey master = VeilSymmetricKey.generate()) {

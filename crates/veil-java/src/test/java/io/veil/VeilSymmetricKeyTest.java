@@ -1,4 +1,4 @@
-package com.ninjacart.veil;
+package io.veil;
 
 import org.junit.jupiter.api.Test;
 
@@ -382,7 +382,7 @@ class VeilSymmetricKeyTest {
      */
     @Test
     void agentRelayInterop() {
-        // Shared master key (in production, from Vault KV)
+        // Shared master key (in production, loaded from your secret store)
         byte[] masterKey = new byte[32];
         new SecureRandom().nextBytes(masterKey);
         byte[] context = "cw-user42-conv99".getBytes(StandardCharsets.UTF_8);

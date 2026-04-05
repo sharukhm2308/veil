@@ -185,7 +185,7 @@ Each message is encrypted with AES-256-GCM using the appropriate directional key
 
 In addition to the asymmetric ECDH path, Veil provides a **symmetric encryption mode**
 for data-at-rest and service-to-service encryption where a pre-shared master key exists
-(e.g., stored in HashiCorp Vault KV).
+(loaded from whichever secret store the caller uses).
 
 ```
   ┌───────────────────────────────────────────────────────────────┐
@@ -193,8 +193,8 @@ for data-at-rest and service-to-service encryption where a pre-shared master key
   │                                                               │
   │  ┌───────────────┐    ┌───────────────┐    ┌───────────────┐  │
   │  │ Master Key    │    │  HKDF-SHA256  │    │  AES-256-GCM  │  │
-  │  │ (from Vault   │───▶│  Key          │───▶│  Authenticated│  │
-  │  │  KV or any    │    │  Derivation   │    │  Encryption   │  │
+  │  │ (32 bytes,    │───▶│  Key          │───▶│  Authenticated│  │
+  │  │  from caller's│    │  Derivation   │    │  Encryption   │  │
   │  │  secret store)│    │               │    │               │  │
   │  └───────────────┘    └───────────────┘    └───────────────┘  │
   │                                                               │
@@ -212,7 +212,7 @@ A single 256-bit master key is expanded into **context-specific derived keys** u
 HKDF-SHA256. Each unique context string produces a cryptographically independent key:
 
 ```
-  master_key (32 bytes, from Vault KV)
+  master_key (32 bytes, from caller's secret store)
         │
         ▼
   ┌─────────────────────────────────────────────┐
@@ -270,7 +270,7 @@ Serialization: JSON (`to_json()` / `from_json()`) and MessagePack (`to_msgpack()
 | Client ↔ Server inference requests | **Asymmetric** | Forward secrecy, no pre-shared keys needed |
 | Message storage encryption | **Symmetric** | Pre-shared master key, no round-trips per message |
 | Credential/field-level encryption | **Symmetric** | Low-latency, context-bound per user/conversation |
-| Service-to-service payloads | **Symmetric** | Shared secret from Vault, deterministic key derivation |
+| Service-to-service payloads | **Symmetric** | Pre-shared master key, deterministic key derivation |
 
 ---
 
@@ -584,7 +584,7 @@ The Java SDK uses handle-based opaque pointers for safe native memory management
 All key classes implement `AutoCloseable` for deterministic cleanup.
 
 ```java
-import com.ninjacart.veil.VeilSymmetricKey;
+import io.veil.VeilSymmetricKey;
 
 try (VeilSymmetricKey master = VeilSymmetricKey.generate()) {
     try (VeilSymmetricKey derived = master.derive("user-123-conv-456".getBytes())) {

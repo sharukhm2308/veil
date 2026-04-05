@@ -1,4 +1,4 @@
-package com.ninjacart.veil;
+package io.veil;
 
 /**
  * Veil symmetric encryption key -- AES-256-GCM with HKDF-SHA256 key derivation.
@@ -26,7 +26,7 @@ package com.ninjacart.veil;
  *
  * <h3>Derive per-conversation keys from a master key:</h3>
  * <pre>{@code
- * byte[] masterKey = vaultClient.readSecret("veil/master-key");
+ * byte[] masterKey = secretStore.load("veil/master-key");
  * byte[] context = ("cw-" + userId + "-" + conversationId).getBytes(StandardCharsets.UTF_8);
  *
  * try (VeilSymmetricKey key = VeilSymmetricKey.derive(masterKey, context)) {
@@ -118,7 +118,7 @@ public class VeilSymmetricKey implements AutoCloseable {
      *
      * <p>Different contexts yield completely different keys from the same master.
      *
-     * @param masterKey Master key bytes (typically 32 bytes from Vault KV)
+     * @param masterKey Master key bytes (typically 32 bytes, loaded from your secret store)
      * @param context   Binding context (e.g. "cw-{userId}-{conversationId}".getBytes())
      * @return A derived VeilSymmetricKey
      * @throws VeilException if key derivation fails

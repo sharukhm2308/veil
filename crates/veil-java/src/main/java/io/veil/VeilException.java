@@ -1,4 +1,4 @@
-package com.ninjacart.veil;
+package io.veil;
 
 /**
  * Unchecked exception thrown by Veil SDK operations.

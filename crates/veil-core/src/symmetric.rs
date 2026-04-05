@@ -1,16 +1,15 @@
 //! Veil symmetric encryption -- AES-256-GCM with HKDF key derivation.
 //!
 //! This module provides authenticated symmetric encryption for data at rest.
-//! It is designed to replace HashiCorp Vault Transit for message-level
-//! encryption while keeping latency low: the master key lives in Vault KV
-//! (or any secure secret store), and all cryptographic operations happen
-//! in-process with no network round-trips per encrypt/decrypt call.
+//! A single 32-byte master key is loaded once at startup; per-context keys
+//! are derived locally via HKDF and all encryption runs in-process, so
+//! there are no network round-trips on the encrypt/decrypt path.
 //!
 //! # Architecture
 //!
 //! ```text
 //!  +-------------------+
-//!  |   Vault KV Store  |   (or any secret backend)
+//!  |  Secret store     |   (caller-provided; any secure backend)
 //!  |  master key (32B) |
 //!  +--------+----------+
 //!           |
@@ -56,7 +55,8 @@
 //! use veil_core::symmetric::SymmetricKey;
 //! use veil_core::cipher;
 //!
-//! // Simulate a master key fetched from Vault KV at startup.
+//! // Master key loaded once at startup from your secret store
+//! // (generated here for the doc-test).
 //! let master = cipher::generate_key();
 //!
 //! // Derive a per-conversation key.
@@ -74,14 +74,6 @@
 //! let plaintext = key.decrypt(&loaded).unwrap();
 //! assert_eq!(plaintext, b"sensitive prompt");
 //! ```
-//!
-//! # Migration from Vault Transit
-//!
-//! Previously, every encrypt/decrypt call was a network round-trip to Vault
-//! Transit. With this module the master key is fetched once from Vault KV
-//! and all HKDF derivation + AES-GCM operations run locally. This removes
-//! Vault Transit as a latency bottleneck and single point of failure while
-//! preserving the same security model (Vault still guards the master key).
 
 use hkdf::Hkdf;
 use serde::{Deserialize, Serialize};
@@ -115,7 +107,7 @@ const SYMMETRIC_VERSION: u8 = 1;
 /// | Scenario | Method |
 /// |----------|--------|
 /// | Standalone encryption (no master key) | [`SymmetricKey::generate`] |
-/// | Per-context keys from a Vault master key | [`SymmetricKey::derive`] |
+/// | Per-context keys from a shared master key | [`SymmetricKey::derive`] |
 /// | Restoring a key from config/env | [`SymmetricKey::from_base64`] |
 #[derive(Zeroize, ZeroizeOnDrop)]
 pub struct SymmetricKey {
@@ -198,7 +190,7 @@ impl SymmetricKey {
     /// key, but different contexts yield cryptographically independent keys.
     ///
     /// # Arguments
-    /// * `master` - The 32-byte master key (typically fetched from Vault KV).
+    /// * `master` - The 32-byte master key (loaded from your secret store).
     /// * `context` - Binding context bytes, e.g. `b"cw-user123-conv456"`.
     ///
     /// # Returns

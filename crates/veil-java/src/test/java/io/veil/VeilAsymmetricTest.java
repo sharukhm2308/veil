@@ -1,4 +1,4 @@
-package com.ninjacart.veil;
+package io.veil;
 
 import org.junit.jupiter.api.Test;
 

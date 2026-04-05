@@ -56,7 +56,7 @@ unsafe fn handle_drop<T>(handle: jlong) {
 // ---------------------------------------------------------------------------
 
 fn throw_veil_exception(env: &mut JNIEnv, msg: &str) {
-    let _ = env.throw_new("com/ninjacart/veil/VeilException", msg);
+    let _ = env.throw_new("io/veil/VeilException", msg);
 }
 
 fn get_string(env: &mut JNIEnv, s: &JString) -> Option<String> {
@@ -74,7 +74,7 @@ fn get_bytes(env: &mut JNIEnv, arr: &JByteArray) -> Option<Vec<u8>> {
 /// Generate a new X25519 keypair.
 /// Returns a Java String[] with [secretB64, publicB64].
 #[no_mangle]
-pub extern "system" fn Java_com_ninjacart_veil_VeilKeyPair_nativeGenerate<'local>(
+pub extern "system" fn Java_io_veil_VeilKeyPair_nativeGenerate<'local>(
     mut env: JNIEnv<'local>,
     _class: JClass<'local>,
 ) -> jobject {
@@ -101,7 +101,7 @@ pub extern "system" fn Java_com_ninjacart_veil_VeilKeyPair_nativeGenerate<'local
 /// Reconstruct a keypair from a base64-encoded secret key.
 /// Returns a Java String[] with [secretB64, publicB64].
 #[no_mangle]
-pub extern "system" fn Java_com_ninjacart_veil_VeilKeyPair_nativeFromSecretBase64<'local>(
+pub extern "system" fn Java_io_veil_VeilKeyPair_nativeFromSecretBase64<'local>(
     mut env: JNIEnv<'local>,
     _class: JClass<'local>,
     secret_b64: JString<'local>,
@@ -144,7 +144,7 @@ pub extern "system" fn Java_com_ninjacart_veil_VeilKeyPair_nativeFromSecretBase6
 
 /// Create a new ClientSession. Returns handle (long).
 #[no_mangle]
-pub extern "system" fn Java_com_ninjacart_veil_VeilClientSession_nativeCreate<'local>(
+pub extern "system" fn Java_io_veil_VeilClientSession_nativeCreate<'local>(
     mut env: JNIEnv<'local>,
     _class: JClass<'local>,
     server_pub_b64: JString<'local>,
@@ -184,7 +184,7 @@ pub extern "system" fn Java_com_ninjacart_veil_VeilClientSession_nativeCreate<'l
 /// }
 /// ```
 #[no_mangle]
-pub extern "system" fn Java_com_ninjacart_veil_VeilClientSession_nativeEncryptRequest<'local>(
+pub extern "system" fn Java_io_veil_VeilClientSession_nativeEncryptRequest<'local>(
     mut env: JNIEnv<'local>,
     _class: JClass<'local>,
     handle: jlong,
@@ -247,7 +247,7 @@ pub extern "system" fn Java_com_ninjacart_veil_VeilClientSession_nativeEncryptRe
 ///
 /// Takes the envelope as 4 base64 strings: nonce, ciphertext, aad, version.
 #[no_mangle]
-pub extern "system" fn Java_com_ninjacart_veil_VeilClientSession_nativeDecryptResponse<'local>(
+pub extern "system" fn Java_io_veil_VeilClientSession_nativeDecryptResponse<'local>(
     mut env: JNIEnv<'local>,
     _class: JClass<'local>,
     handle: jlong,
@@ -319,7 +319,7 @@ pub extern "system" fn Java_com_ninjacart_veil_VeilClientSession_nativeDecryptRe
 
 /// Get the ephemeral public key (base64).
 #[no_mangle]
-pub extern "system" fn Java_com_ninjacart_veil_VeilClientSession_nativeEphemeralPublicBase64<
+pub extern "system" fn Java_io_veil_VeilClientSession_nativeEphemeralPublicBase64<
     'local,
 >(
     env: JNIEnv<'local>,
@@ -336,7 +336,7 @@ pub extern "system" fn Java_com_ninjacart_veil_VeilClientSession_nativeEphemeral
 
 /// Destroy a ClientSession handle.
 #[no_mangle]
-pub extern "system" fn Java_com_ninjacart_veil_VeilClientSession_nativeDestroy<'local>(
+pub extern "system" fn Java_io_veil_VeilClientSession_nativeDestroy<'local>(
     _env: JNIEnv<'local>,
     _class: JClass<'local>,
     handle: jlong,
@@ -352,7 +352,7 @@ pub extern "system" fn Java_com_ninjacart_veil_VeilClientSession_nativeDestroy<'
 
 /// Create a new ServerSession. Returns handle (long).
 #[no_mangle]
-pub extern "system" fn Java_com_ninjacart_veil_VeilServerSession_nativeCreate<'local>(
+pub extern "system" fn Java_io_veil_VeilServerSession_nativeCreate<'local>(
     mut env: JNIEnv<'local>,
     _class: JClass<'local>,
     secret_key_b64: JString<'local>,
@@ -416,7 +416,7 @@ pub extern "system" fn Java_com_ninjacart_veil_VeilServerSession_nativeCreate<'l
 
 /// Decrypt a request envelope. Returns plaintext bytes.
 #[no_mangle]
-pub extern "system" fn Java_com_ninjacart_veil_VeilServerSession_nativeDecryptRequest<'local>(
+pub extern "system" fn Java_io_veil_VeilServerSession_nativeDecryptRequest<'local>(
     mut env: JNIEnv<'local>,
     _class: JClass<'local>,
     handle: jlong,
@@ -466,7 +466,7 @@ pub extern "system" fn Java_com_ninjacart_veil_VeilServerSession_nativeDecryptRe
 
 /// Encrypt a response. Returns JSON string with envelope.
 #[no_mangle]
-pub extern "system" fn Java_com_ninjacart_veil_VeilServerSession_nativeEncryptResponse<'local>(
+pub extern "system" fn Java_io_veil_VeilServerSession_nativeEncryptResponse<'local>(
     mut env: JNIEnv<'local>,
     _class: JClass<'local>,
     handle: jlong,
@@ -508,7 +508,7 @@ pub extern "system" fn Java_com_ninjacart_veil_VeilServerSession_nativeEncryptRe
 
 /// Destroy a ServerSession handle.
 #[no_mangle]
-pub extern "system" fn Java_com_ninjacart_veil_VeilServerSession_nativeDestroy<'local>(
+pub extern "system" fn Java_io_veil_VeilServerSession_nativeDestroy<'local>(
     _env: JNIEnv<'local>,
     _class: JClass<'local>,
     handle: jlong,
@@ -524,7 +524,7 @@ pub extern "system" fn Java_com_ninjacart_veil_VeilServerSession_nativeDestroy<'
 
 /// Create a SymmetricKey from raw 32 bytes. Returns handle (long).
 #[no_mangle]
-pub extern "system" fn Java_com_ninjacart_veil_VeilSymmetricKey_nativeFromBytes<'local>(
+pub extern "system" fn Java_io_veil_VeilSymmetricKey_nativeFromBytes<'local>(
     mut env: JNIEnv<'local>,
     _class: JClass<'local>,
     raw: JByteArray<'local>,
@@ -551,7 +551,7 @@ pub extern "system" fn Java_com_ninjacart_veil_VeilSymmetricKey_nativeFromBytes<
 
 /// Create a SymmetricKey from a base64-encoded string. Returns handle (long).
 #[no_mangle]
-pub extern "system" fn Java_com_ninjacart_veil_VeilSymmetricKey_nativeFromBase64<'local>(
+pub extern "system" fn Java_io_veil_VeilSymmetricKey_nativeFromBase64<'local>(
     mut env: JNIEnv<'local>,
     _class: JClass<'local>,
     b64: JString<'local>,
@@ -574,7 +574,7 @@ pub extern "system" fn Java_com_ninjacart_veil_VeilSymmetricKey_nativeFromBase64
 
 /// Generate a new random SymmetricKey. Returns handle (long).
 #[no_mangle]
-pub extern "system" fn Java_com_ninjacart_veil_VeilSymmetricKey_nativeGenerate<'local>(
+pub extern "system" fn Java_io_veil_VeilSymmetricKey_nativeGenerate<'local>(
     _env: JNIEnv<'local>,
     _class: JClass<'local>,
 ) -> jlong {
@@ -583,7 +583,7 @@ pub extern "system" fn Java_com_ninjacart_veil_VeilSymmetricKey_nativeGenerate<'
 
 /// Derive a SymmetricKey from master key + context via HKDF. Returns handle (long).
 #[no_mangle]
-pub extern "system" fn Java_com_ninjacart_veil_VeilSymmetricKey_nativeDerive<'local>(
+pub extern "system" fn Java_io_veil_VeilSymmetricKey_nativeDerive<'local>(
     mut env: JNIEnv<'local>,
     _class: JClass<'local>,
     master: JByteArray<'local>,
@@ -619,7 +619,7 @@ pub extern "system" fn Java_com_ninjacart_veil_VeilSymmetricKey_nativeDerive<'lo
 /// {"version":1,"nonce":"b64","ciphertext":"b64","aad":"b64"}
 /// ```
 #[no_mangle]
-pub extern "system" fn Java_com_ninjacart_veil_VeilSymmetricKey_nativeEncrypt<'local>(
+pub extern "system" fn Java_io_veil_VeilSymmetricKey_nativeEncrypt<'local>(
     mut env: JNIEnv<'local>,
     _class: JClass<'local>,
     handle: jlong,
@@ -673,7 +673,7 @@ pub extern "system" fn Java_com_ninjacart_veil_VeilSymmetricKey_nativeEncrypt<'l
 /// {"version":1,"nonce":"b64","ciphertext":"b64","aad":"b64","key_version":N}
 /// ```
 #[no_mangle]
-pub extern "system" fn Java_com_ninjacart_veil_VeilSymmetricKey_nativeEncryptVersioned<'local>(
+pub extern "system" fn Java_io_veil_VeilSymmetricKey_nativeEncryptVersioned<'local>(
     mut env: JNIEnv<'local>,
     _class: JClass<'local>,
     handle: jlong,
@@ -726,7 +726,7 @@ pub extern "system" fn Java_com_ninjacart_veil_VeilSymmetricKey_nativeEncryptVer
 ///
 /// Takes nonce, ciphertext, and aad as base64 strings (from the Java envelope).
 #[no_mangle]
-pub extern "system" fn Java_com_ninjacart_veil_VeilSymmetricKey_nativeDecrypt<'local>(
+pub extern "system" fn Java_io_veil_VeilSymmetricKey_nativeDecrypt<'local>(
     mut env: JNIEnv<'local>,
     _class: JClass<'local>,
     handle: jlong,
@@ -783,7 +783,7 @@ pub extern "system" fn Java_com_ninjacart_veil_VeilSymmetricKey_nativeDecrypt<'l
 
 /// Export the key as base64 string.
 #[no_mangle]
-pub extern "system" fn Java_com_ninjacart_veil_VeilSymmetricKey_nativeToBase64<'local>(
+pub extern "system" fn Java_io_veil_VeilSymmetricKey_nativeToBase64<'local>(
     env: JNIEnv<'local>,
     _class: JClass<'local>,
     handle: jlong,
@@ -798,7 +798,7 @@ pub extern "system" fn Java_com_ninjacart_veil_VeilSymmetricKey_nativeToBase64<'
 
 /// Destroy a SymmetricKey handle (zeroize + free).
 #[no_mangle]
-pub extern "system" fn Java_com_ninjacart_veil_VeilSymmetricKey_nativeDestroy<'local>(
+pub extern "system" fn Java_io_veil_VeilSymmetricKey_nativeDestroy<'local>(
     _env: JNIEnv<'local>,
     _class: JClass<'local>,
     handle: jlong,

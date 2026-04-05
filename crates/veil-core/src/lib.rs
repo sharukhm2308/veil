@@ -24,12 +24,12 @@
 //!
 //! For data **at rest** (stored prompts, cached responses, audit logs),
 //! Veil provides AES-256-GCM symmetric encryption with HKDF key
-//! derivation. A single master key (stored in Vault KV or any secret
-//! backend) is used to derive per-context keys, eliminating per-call
-//! network round-trips to Vault Transit.
+//! derivation. A single master key is used to derive per-context keys,
+//! so all crypto runs in-process with no per-call round-trips to an
+//! external key service.
 //!
 //! ```text
-//! Master key (Vault KV)
+//! Master key (32 bytes)
 //!   --> HKDF-SHA256 + context --> per-context AES-256-GCM key
 //!   --> encrypt/decrypt with AAD = context (double-binding)
 //! ```
@@ -42,7 +42,8 @@
 //! use veil_core::symmetric::SymmetricKey;
 //! use veil_core::cipher;
 //!
-//! // Master key from Vault KV (or generate for testing).
+//! // Master key (generated here for testing; in production, load from
+//! // your secret store).
 //! let master = cipher::generate_key();
 //!
 //! // Derive a key scoped to a specific conversation.
