@@ -1,0 +1,15 @@
+[package]
+name = "veil-python"
+version = "0.1.0"
+edition = "2021"
+description = "Python SDK for Veil E2E encrypted LLM inference — PyO3 bindings for veil-core"
+
+[lib]
+name = "veil_sdk"
+crate-type = ["cdylib"]
+
+[dependencies]
+veil-core = { path = "../veil-core" }
+pyo3 = { version = "0.23", features = ["extension-module"] }
+serde_json = "1"
+base64 = "0.22"

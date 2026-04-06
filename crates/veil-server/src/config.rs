@@ -23,7 +23,7 @@ pub struct ServerConfig {
     pub backend_url: String,
 
     /// Server's static secret key (base64).
-    /// In production, load from HSM or secure key store.
+    /// In production, load from a secure secret store.
     pub server_secret_key: String,
 
     /// Key ID advertised to clients.

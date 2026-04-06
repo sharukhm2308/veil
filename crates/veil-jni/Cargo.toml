@@ -1,0 +1,15 @@
+[package]
+name = "veil-jni"
+version = "0.1.0"
+edition = "2021"
+description = "JNI bindings for Veil E2E encrypted LLM inference — wraps veil-core for Java"
+
+[lib]
+name = "veil_jni"
+crate-type = ["cdylib"]
+
+[dependencies]
+veil-core = { path = "../veil-core" }
+jni = "0.21"
+base64 = "0.22"
+serde_json = "1"

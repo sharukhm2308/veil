@@ -13,10 +13,13 @@ use chrono::Utc;
 use serde_json::json;
 use tracing::{debug, error, info, warn};
 
-use veil_core::{keys::{PreKeyPair, PreKeyBundle, StaticKeyPair}, session::ServerSession, VeilEnvelope};
+use veil_core::{
+    keys::{PreKeyBundle, PreKeyPair, StaticKeyPair},
+    session::ServerSession,
+    VeilEnvelope,
+};
 
 use crate::metrics;
-
 
 /// Thread-safe pool of one-time prekeys for true forward secrecy.
 pub struct PreKeyPool {
@@ -34,12 +37,15 @@ impl PreKeyPool {
     }
     pub fn bundles(&self, server_static_pub: &str, server_key_id: &str) -> Vec<PreKeyBundle> {
         use base64::{engine::general_purpose::STANDARD as BASE64, Engine as _};
-        self.prekeys.values().map(|pk| PreKeyBundle {
-            server_static_pub: server_static_pub.to_string(),
-            prekey_pub: BASE64.encode(pk.public.as_bytes()),
-            prekey_id: pk.key_id.clone(),
-            key_id: server_key_id.to_string(),
-        }).collect()
+        self.prekeys
+            .values()
+            .map(|pk| PreKeyBundle {
+                server_static_pub: server_static_pub.to_string(),
+                prekey_pub: BASE64.encode(pk.public.as_bytes()),
+                prekey_id: pk.key_id.clone(),
+                key_id: server_key_id.to_string(),
+            })
+            .collect()
     }
     pub fn consume(&mut self, prekey_id: &str) -> Option<PreKeyPair> {
         self.prekeys.remove(prekey_id)
@@ -100,7 +106,10 @@ pub async fn public_key(State(state): State<Arc<AppState>>) -> impl IntoResponse
         }))
         .into_response(),
         None => {
-            error!("Active key_id '{}'not found in keypairs", state.active_key_id);
+            error!(
+                "Active key_id '{}'not found in keypairs",
+                state.active_key_id
+            );
             (
                 StatusCode::INTERNAL_SERVER_ERROR,
                 Json(json!({"error": "Internal server error"})),
@@ -110,23 +119,33 @@ pub async fn public_key(State(state): State<Arc<AppState>>) -> impl IntoResponse
     }
 }
 
-
 /// Prekey bundle endpoint for true forward secrecy.
 /// GET /v1/veil/prekeys
 pub async fn prekeys(State(state): State<Arc<AppState>>) -> impl IntoResponse {
     let active_keypair = match state.keypairs.get(&state.active_key_id) {
         Some(kp) => kp,
-        None => return (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({"error": "Internal server error"}))) .into_response(),
+        None => {
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({"error": "Internal server error"})),
+            )
+                .into_response()
+        }
     };
     let server_pub = active_keypair.public_base64();
     let pool = state.prekey_pool.lock().unwrap();
     let bundles = pool.bundles(&server_pub, &state.active_key_id);
-    let bundle_json: Vec<serde_json::Value> = bundles.iter().map(|b| json!({
-        "server_public_key": b.server_static_pub,
-        "prekey_pub": b.prekey_pub,
-        "prekey_id": b.prekey_id,
-        "server_key_id": b.key_id,
-    })).collect();
+    let bundle_json: Vec<serde_json::Value> = bundles
+        .iter()
+        .map(|b| {
+            json!({
+                "server_public_key": b.server_static_pub,
+                "prekey_pub": b.prekey_pub,
+                "prekey_id": b.prekey_id,
+                "server_key_id": b.key_id,
+            })
+        })
+        .collect();
     Json(json!({"prekeys": bundle_json, "count": bundles.len(), "algorithm": "X25519+dual-DH+HKDF-SHA256+AES-256-GCM", "protocol_version": 1})).into_response()
 }
 
@@ -167,39 +186,37 @@ pub async fn inference(
     // Replay protection: validate timestamp and capture for AAD binding
     let request_timestamp = match headers.get("X-Veil-Timestamp") {
         Some(ts_header) => match ts_header.to_str() {
-            Ok(ts_str) => {
-                match chrono::DateTime::parse_from_rfc3339(ts_str) {
-                    Ok(request_time) => {
-                        let now = Utc::now();
-                        let age = now
-                            .signed_duration_since(request_time.with_timezone(&Utc))
-                            .num_seconds();
-                        if age < 0 || age > state.max_request_age.as_secs() as i64 {
-                            metrics::record_request("error");
-                            warn!(
-                                "Request timestamp too old or in future: age={}s, max={}s",
-                                age,
-                                state.max_request_age.as_secs()
-                            );
-                            return (
-                                StatusCode::BAD_REQUEST,
-                                Json(json!({"error": "Request expired or invalid timestamp"})),
-                            )
-                                .into_response();
-                        }
-                        ts_str.to_string()
-                    }
-                    Err(e) => {
+            Ok(ts_str) => match chrono::DateTime::parse_from_rfc3339(ts_str) {
+                Ok(request_time) => {
+                    let now = Utc::now();
+                    let age = now
+                        .signed_duration_since(request_time.with_timezone(&Utc))
+                        .num_seconds();
+                    if age < 0 || age > state.max_request_age.as_secs() as i64 {
                         metrics::record_request("error");
-                        error!("Invalid timestamp format: {}", e);
+                        warn!(
+                            "Request timestamp too old or in future: age={}s, max={}s",
+                            age,
+                            state.max_request_age.as_secs()
+                        );
                         return (
                             StatusCode::BAD_REQUEST,
-                            Json(json!({"error": "Invalid request"})),
+                            Json(json!({"error": "Request expired or invalid timestamp"})),
                         )
                             .into_response();
                     }
+                    ts_str.to_string()
                 }
-            }
+                Err(e) => {
+                    metrics::record_request("error");
+                    error!("Invalid timestamp format: {}", e);
+                    return (
+                        StatusCode::BAD_REQUEST,
+                        Json(json!({"error": "Invalid request"})),
+                    )
+                        .into_response();
+                }
+            },
             Err(_) => {
                 metrics::record_request("error");
                 return (
@@ -287,7 +304,13 @@ pub async fn inference(
 
     // Create server session and decrypt
     let decrypt_start = Instant::now();
-    let session = match ServerSession::new(server_keypair, &ephemeral_key, &key_id, &request_id, &request_timestamp) {
+    let session = match ServerSession::new(
+        server_keypair,
+        &ephemeral_key,
+        &key_id,
+        &request_id,
+        &request_timestamp,
+    ) {
         Ok(s) => s,
         Err(e) => {
             metrics::record_request("error");

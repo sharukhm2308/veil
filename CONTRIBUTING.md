@@ -45,14 +45,23 @@ By participating, you are expected to uphold this code.
 
 ### Prerequisites
 
-- **Rust** 1.75+ (install via [rustup](https://rustup.rs/))
+- **Rust** 1.80+ (install via [rustup](https://rustup.rs/))
 - **cargo** (included with Rust)
 - **Git** 2.x+
+
+**For Python SDK development:**
+- **Python** 3.9+
+- **maturin** (`pip install maturin`) — builds PyO3 native extensions
+- **pytest** (`pip install pytest`) — runs the Python test suite
+
+**For Java SDK development:**
+- **JDK** 11+
+- **Maven** 3.6+ (`mvn`)
 
 ### Build
 
 ```bash
-# Debug build
+# Debug build (all crates)
 cargo build
 
 # Release build (optimized)
@@ -60,12 +69,18 @@ cargo build --release
 
 # Build a specific crate
 cargo build -p veil-core
+
+# Build the Python native extension
+cd crates/veil-python && maturin develop
+
+# Build the JNI native library
+cargo build -p veil-jni --release
 ```
 
 ### Run Tests
 
 ```bash
-# Run all tests
+# Run all Rust tests (unit + integration + security + doc)
 cargo test
 
 # Run tests for a specific crate
@@ -76,6 +91,12 @@ cargo test test_full_e2e_roundtrip
 
 # Run tests with output
 cargo test -- --nocapture
+
+# Run Python SDK tests (requires maturin develop first)
+cd crates/veil-python && pytest tests/ -v
+
+# Run Java SDK tests (requires JNI library on library path)
+cd crates/veil-jni/veil-java && mvn test -Djava.library.path=../../../target/release
 ```
 
 ### Run the CLI
@@ -140,8 +161,11 @@ The scope indicates the crate or area affected:
 
 ```
 feat(core): add envelope versioning
+feat(symmetric): add HKDF key derivation
 fix(server): handle connection timeout gracefully
 test(client): add proxy integration tests
+test(python): add symmetric key roundtrip tests
+test(java): add JNI handle lifecycle tests
 docs(readme): update quick start section
 ```
 
@@ -234,19 +258,23 @@ How this was tested (new tests, manual verification, etc.).
 
 - **All cryptographic functions** — correctness, edge cases, error conditions
 - **Envelope serialization** — roundtrip for all formats (MessagePack, JSON)
+- **Symmetric encryption** — key generation, HKDF derivation, context isolation, versioned envelopes
 - **Session management** — key exchange, cross-session isolation
 - **Security properties** — nonce uniqueness, ciphertext indistinguishability,
-  key randomness, tamper detection
+  key randomness, tamper detection, zeroize-on-drop
+- **FFI boundaries** — Python (PyO3) and Java (JNI) bindings match Rust behavior
 - **Error handling** — invalid inputs, corrupted data, wrong keys
 
 ### Test Categories
 
 | Category | Location | Purpose |
 |----------|---------|--------|
-| Unit tests | `crates/*/src/*.rs` (`#[cfg(test)]`) | Test individual functions |
+| Unit tests | `crates/veil-core/src/*.rs` (`#[cfg(test)]`) | Test individual functions |
 | Integration tests | `crates/veil-core/tests/integration.rs` | Test crate-level workflows |
 | Security tests | `crates/veil-core/tests/security.rs` | Verify cryptographic properties |
 | Doc tests | Inline in `//!` and `///` comments | Verify examples compile |
+| Python tests | `crates/veil-python/tests/test_veil_sdk.py` | PyO3 binding correctness (56 tests) |
+| Java tests | `crates/veil-jni/veil-java/src/test/java/` | JNI binding correctness (43 tests) |
 
 ### Writing Good Crypto Tests
 
@@ -271,6 +299,30 @@ fn test_example_pattern() {
 }
 ```
 
+### Writing Symmetric Encryption Tests
+
+```rust
+#[test]
+fn test_symmetric_example() {
+    use veil_core::symmetric::SymmetricKey;
+
+    // 1. Generate or derive a key
+    let master = SymmetricKey::generate();
+    let derived = master.derive(b"user-123-conversation-456");
+
+    // 2. Encrypt with context as AAD
+    let envelope = derived.encrypt(b"secret message", b"user-123-conversation-456").unwrap();
+
+    // 3. Roundtrip
+    let plaintext = derived.decrypt(&envelope).unwrap();
+    assert_eq!(plaintext, b"secret message");
+
+    // 4. Cross-context isolation: different context must fail
+    let other = master.derive(b"user-789-conversation-000");
+    assert!(other.decrypt(&envelope).is_err());
+}
+```
+
 ---
 
 ## Code Style
@@ -279,7 +331,9 @@ fn test_example_pattern() {
 
 - **Clarity over cleverness** — write code that others can understand
 - **Explicit over implicit** — prefer clear type annotations and error handling
-- **Safe by default** — no `unsafe` code in `veil-core` without extensive justification
+- **Safe by default** — no `unsafe` code in `veil-core` without extensive justification.
+  Note: `veil-jni` necessarily contains unsafe code at the JNI boundary — all such code
+  must be thoroughly documented and tested for handle safety.
 - **Zero warnings** — `cargo clippy -- -D warnings` must pass
 
 ### Naming Conventions

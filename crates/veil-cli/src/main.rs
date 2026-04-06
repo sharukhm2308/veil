@@ -209,8 +209,14 @@ fn cmd_test_roundtrip(message: &str) -> Result<()> {
     println!("   Model: {}", metadata.model);
 
     // Create server session
-    let server_session = ServerSession::new(&server_kp, &metadata.ephemeral_key, "test-key", &metadata.request_id, &metadata.timestamp)
-        .context("Failed to create server session")?;
+    let server_session = ServerSession::new(
+        &server_kp,
+        &metadata.ephemeral_key,
+        "test-key",
+        &metadata.request_id,
+        &metadata.timestamp,
+    )
+    .context("Failed to create server session")?;
     println!("✅ Server session created");
 
     // Decrypt request

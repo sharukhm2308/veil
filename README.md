@@ -165,11 +165,20 @@ For full E2EE, deploy veil-server in-process with your LLM inference engine (see
 
 ### Cryptographic Pipeline
 
+**Asymmetric path** (session-based, forward secrecy):
+
 | Stage | Algorithm | Purpose |
 |-------|-----------|:--------|
 | Key Exchange | X25519 ECDH | Establish shared secret; true forward secrecy via ephemeral client + one-time server prekeys |
 | Key Derivation | HKDF-SHA256 | Derive directional encryption keys |
 | Encryption | AES-256-GCM | Authenticated encryption of prompts/responses |
+
+**Symmetric path** (master-key, data at rest):
+
+| Stage | Algorithm | Purpose |
+|-------|-----------|:--------|
+| Key Derivation | HKDF-SHA256 | Derive context-specific keys from a master key |
+| Encryption | AES-256-GCM | Authenticated encryption with context as AAD |
 
 Every request uses a **fresh client ephemeral key** combined with a **one-time server prekey**,
 providing **true forward secrecy** —
@@ -189,7 +198,8 @@ compromising the server key does not reveal past conversations.
 - 📦 **Pure Rust** — memory-safe, no unsafe code in core
 - 🧹 **Zeroize-on-drop** — key material scrubbed from memory after use
 - 🐳 **Docker ready** — multi-stage builds for client and server
-- 🧪 **Thoroughly tested** — 49 tests covering crypto, integration, and security properties
+- 🔑 **Symmetric encryption** — AES-256-GCM with HKDF key derivation for data-at-rest
+- 🧪 **Thoroughly tested** — 94 Rust + 56 Python + 43 Java tests covering crypto, integration, and security properties
 
 ---
 
@@ -200,15 +210,22 @@ veil/
 ├── crates/
 │   ├── veil-core/       # Pure cryptographic library (no I/O, no async)
 │   │   ├── src/
-│   │   │   ├── keys.rs      # X25519 key generation and ECDH
-│   │   │   ├── kdf.rs       # HKDF-SHA256 key derivation
-│   │   │   ├── cipher.rs    # AES-256-GCM encrypt/decrypt
-│   │   │   ├── envelope.rs  # Wire format (MessagePack + JSON)
-│   │   │   ├── session.rs   # Client/server session management
-│   │   │   └── error.rs     # Error types
+│   │   │   ├── keys.rs       # X25519 key generation and ECDH
+│   │   │   ├── kdf.rs        # HKDF-SHA256 key derivation (asymmetric)
+│   │   │   ├── cipher.rs     # AES-256-GCM encrypt/decrypt
+│   │   │   ├── envelope.rs   # Wire format (MessagePack + JSON)
+│   │   │   ├── session.rs    # Client/server session management
+│   │   │   ├── symmetric.rs  # Symmetric encryption (HKDF + AES-256-GCM)
+│   │   │   └── error.rs      # Error types
 │   │   └── tests/
 │   │       ├── integration.rs   # E2E roundtrip tests
 │   │       └── security.rs      # Security property tests
+│   ├── veil-python/     # Python SDK via PyO3 native bindings
+│   │   ├── src/lib.rs       # PyO3 wrapper classes
+│   │   └── tests/           # 56 pytest test cases
+│   ├── veil-jni/        # JNI native library for Java
+│   │   ├── src/lib.rs       # JNI FFI bridge
+│   │   └── veil-java/       # Java SDK classes + 43 JUnit tests
 │   ├── veil-client/     # HTTP proxy (encrypts outgoing requests)
 │   ├── veil-server/     # Axum server shim (decrypts, forwards to LLM)
 │   └── veil-cli/        # CLI tool for keygen, testing, proxy, server
@@ -231,21 +248,42 @@ audited once, available everywhere.
 
 | Phase | SDK | Technology | Status |
 |:-----:|-----|-----------|:------:|
-| 1 | **Proxy + CLI** | Native Rust | ✅ Current |
-| 2 | **Python SDK** | PyO3 bindings | 🔜 Next |
-| 3 | **JavaScript/TypeScript SDK** | NAPI-RS (Node) + WASM (Browser) | 📋 Planned |
-| 4 | **Go SDK** | CGo FFI | 📋 Planned |
-| 5 | **Java/Kotlin SDK** | JNI bindings | 📋 Planned |
+| 1 | **Proxy + CLI** | Native Rust | ✅ Complete |
+| 2 | **Python SDK** | PyO3 bindings | ✅ Complete |
+| 3 | **Java/Kotlin SDK** | JNI bindings | ✅ Complete |
+| 4 | **JavaScript/TypeScript SDK** | NAPI-RS (Node) + WASM (Browser) | 📋 Planned |
+| 5 | **Go SDK** | CGo FFI | 📋 Planned |
 | 6 | **Swift/Kotlin Mobile** | Mozilla UniFFI | 📋 Planned |
 
-### Future Python SDK Usage (Preview)
+### Python SDK Usage
 
 ```python
-from veil import VeilSession
+from veil_sdk import VeilKeyPair, VeilClientSession, VeilSymmetricKey
 
-session = VeilSession(server_public_key="<b64>", key_id="prod-v2")
-envelope, headers = session.encrypt_request(prompt, model="gpt-4")
-plaintext = session.decrypt_response(response_bytes)
+# Asymmetric: session-based encryption (forward secrecy)
+server_kp = VeilKeyPair.generate()
+client = VeilClientSession(server_kp.public_base64(), "key-1")
+envelope = client.encrypt_request(b'{"prompt": "hello"}', "gpt-4", 100)
+
+# Symmetric: master-key encryption (data at rest)
+master = VeilSymmetricKey.generate()
+derived = master.derive(b"user-123-conversation-456")
+encrypted = derived.encrypt(b"secret message", b"user-123-conversation-456")
+plaintext = derived.decrypt(encrypted)
+```
+
+### Java SDK Usage
+
+```java
+import io.veil.VeilSymmetricKey;
+
+// Symmetric encryption with AutoCloseable lifecycle
+try (VeilSymmetricKey master = VeilSymmetricKey.generate()) {
+    try (VeilSymmetricKey derived = master.derive("ctx".getBytes())) {
+        var envelope = derived.encrypt("secret".getBytes(), "ctx".getBytes());
+        byte[] plaintext = derived.decrypt(envelope);
+    }
+} // keys are zeroized on close
 ```
 
 📖 **SDK architecture details** → [ARCHITECTURE.md § SDK Architecture](ARCHITECTURE.md#sdk-architecture-ffi-bindings)
@@ -275,6 +313,105 @@ cargo bench
 
 ---
 
+## Publishing & Dependencies
+
+Veil follows a **single-core, many-bindings** model. Publish `veil-core` first, then the language SDKs that wrap it.
+
+### Rust — veil-core (crates.io)
+
+```bash
+# Bump version in Cargo.toml
+cd crates/veil-core
+cargo publish
+```
+
+Published at: [crates.io/crates/veil-core](https://crates.io/crates/veil-core)
+
+Consumers add to `Cargo.toml`:
+```toml
+[dependencies]
+veil-core = "0.1"
+```
+
+Dependencies (`x25519-dalek`, `aes-gcm`, `hkdf`, `sha2`, `rand`, `serde`, `zeroize`, etc.) are resolved automatically by Cargo from crates.io.
+
+### Python — veil-sdk (PyPI)
+
+Built with [maturin](https://github.com/PyO3/maturin) (PyO3 native bindings to `veil-core`):
+
+```bash
+cd crates/veil-python
+
+# Development build (links against local Rust source)
+maturin develop
+
+# Build release wheel
+maturin build --release
+
+# Publish to PyPI
+maturin publish
+```
+
+Published at: [pypi.org/project/veil-sdk](https://pypi.org/project/veil-sdk/)
+
+Consumers install:
+```bash
+pip install veil-sdk
+```
+
+The wheel is self-contained — the compiled Rust native library is bundled inside. No Rust toolchain needed at install time. Platform wheels are built per-architecture (macOS ARM64, macOS x86_64, Linux x86_64, Linux ARM64).
+
+### Java — veil-java (Maven Central)
+
+JNI wrapper over `veil-core` via `libveil_jni`:
+
+```bash
+# 1. Build the native library
+cd crates/veil-jni
+cargo build --release
+# Output: target/release/libveil_jni.dylib (macOS) / libveil_jni.so (Linux)
+
+# 2. Bundle native lib into JAR resources
+mkdir -p crates/veil-java/src/main/resources/native/$(uname -s | tr A-Z a-z)/$(uname -m)
+cp target/release/libveil_jni.* crates/veil-java/src/main/resources/native/$(uname -s | tr A-Z a-z)/$(uname -m)/
+
+# 3. Build and publish
+cd crates/veil-java
+mvn clean package
+mvn deploy
+```
+
+Published at: Maven Central under `io.veil:veil-java`
+
+Consumers add to `pom.xml`:
+```xml
+<dependency>
+    <groupId>io.veil</groupId>
+    <artifactId>veil-java</artifactId>
+    <version>0.2.0</version>
+</dependency>
+```
+
+Zero runtime Java dependencies — only the JNI native library (bundled in the JAR) and JUnit for tests.
+
+### Dependency Flow
+
+```
+crates.io                  PyPI                    Maven Central
+    │                        │                          │
+veil-core  ◄──compiled──  veil-sdk        veil-jni ──► veil-java
+ (Rust)      into wheel   (Python)         (Rust)      (Java)
+    │                        │                          │
+    └── x25519-dalek         └── no Python deps         └── no Java deps
+    └── aes-gcm                  (all Rust inside)          (all Rust inside)
+    └── hkdf, sha2, rand
+    └── serde, zeroize
+```
+
+All cryptography lives in Rust (`veil-core`). Language SDKs are zero-dependency wrappers — they ship the compiled native library inside the package. Consumers never need a Rust toolchain.
+
+---
+
 ## Docker Deployment
 
 ```bash
@@ -296,11 +433,13 @@ Veil takes security seriously:
 
 - **Cryptographic choices**: X25519, HKDF-SHA256, AES-256-GCM — industry-standard
   algorithms from the RustCrypto project
-- **No unsafe code** in `veil-core`
-- **Zeroize-on-drop** for all key material
-- **36 security and integration tests** including tamper detection, cross-session
-  isolation, and ciphertext indistinguishability
+- **No unsafe code** in `veil-core` (JNI boundary unsafe code is isolated in `veil-jni`)
+- **Zeroize-on-drop** for all key material (asymmetric session keys and symmetric keys)
+- **94 Rust tests** including tamper detection, cross-session/cross-context isolation,
+  ciphertext indistinguishability, nonce uniqueness, and zeroize verification
 - **Constant-time operations** via RustCrypto's timing-safe implementations
+- **Context-bound symmetric encryption** — HKDF derivation + GCM AAD double-binding
+  prevents cross-context ciphertext substitution
 
 ### Reporting Vulnerabilities
 

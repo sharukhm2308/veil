@@ -87,7 +87,10 @@ pub async fn run(config: ServerConfig) -> Result<()> {
     info!(listen_addr = %addr, "Veil server listening");
     info!(backend = %config.backend_url, "Backend URL");
     info!(active_key = %config.key_id, "Active Key ID");
-    info!(max_age = config.max_request_age().as_secs(), "Max request age (seconds)");
+    info!(
+        max_age = config.max_request_age().as_secs(),
+        "Max request age (seconds)"
+    );
 
     let listener = tokio::net::TcpListener::bind(addr)
         .await
