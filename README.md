@@ -313,6 +313,105 @@ cargo bench
 
 ---
 
+## Publishing & Dependencies
+
+Veil follows a **single-core, many-bindings** model. Publish `veil-core` first, then the language SDKs that wrap it.
+
+### Rust — veil-core (crates.io)
+
+```bash
+# Bump version in Cargo.toml
+cd crates/veil-core
+cargo publish
+```
+
+Published at: [crates.io/crates/veil-core](https://crates.io/crates/veil-core)
+
+Consumers add to `Cargo.toml`:
+```toml
+[dependencies]
+veil-core = "0.1"
+```
+
+Dependencies (`x25519-dalek`, `aes-gcm`, `hkdf`, `sha2`, `rand`, `serde`, `zeroize`, etc.) are resolved automatically by Cargo from crates.io.
+
+### Python — veil-sdk (PyPI)
+
+Built with [maturin](https://github.com/PyO3/maturin) (PyO3 native bindings to `veil-core`):
+
+```bash
+cd crates/veil-python
+
+# Development build (links against local Rust source)
+maturin develop
+
+# Build release wheel
+maturin build --release
+
+# Publish to PyPI
+maturin publish
+```
+
+Published at: [pypi.org/project/veil-sdk](https://pypi.org/project/veil-sdk/)
+
+Consumers install:
+```bash
+pip install veil-sdk
+```
+
+The wheel is self-contained — the compiled Rust native library is bundled inside. No Rust toolchain needed at install time. Platform wheels are built per-architecture (macOS ARM64, macOS x86_64, Linux x86_64, Linux ARM64).
+
+### Java — veil-java (Maven Central)
+
+JNI wrapper over `veil-core` via `libveil_jni`:
+
+```bash
+# 1. Build the native library
+cd crates/veil-jni
+cargo build --release
+# Output: target/release/libveil_jni.dylib (macOS) / libveil_jni.so (Linux)
+
+# 2. Bundle native lib into JAR resources
+mkdir -p crates/veil-java/src/main/resources/native/$(uname -s | tr A-Z a-z)/$(uname -m)
+cp target/release/libveil_jni.* crates/veil-java/src/main/resources/native/$(uname -s | tr A-Z a-z)/$(uname -m)/
+
+# 3. Build and publish
+cd crates/veil-java
+mvn clean package
+mvn deploy
+```
+
+Published at: Maven Central under `io.veil:veil-java`
+
+Consumers add to `pom.xml`:
+```xml
+<dependency>
+    <groupId>io.veil</groupId>
+    <artifactId>veil-java</artifactId>
+    <version>0.2.0</version>
+</dependency>
+```
+
+Zero runtime Java dependencies — only the JNI native library (bundled in the JAR) and JUnit for tests.
+
+### Dependency Flow
+
+```
+crates.io                  PyPI                    Maven Central
+    │                        │                          │
+veil-core  ◄──compiled──  veil-sdk        veil-jni ──► veil-java
+ (Rust)      into wheel   (Python)         (Rust)      (Java)
+    │                        │                          │
+    └── x25519-dalek         └── no Python deps         └── no Java deps
+    └── aes-gcm                  (all Rust inside)          (all Rust inside)
+    └── hkdf, sha2, rand
+    └── serde, zeroize
+```
+
+All cryptography lives in Rust (`veil-core`). Language SDKs are zero-dependency wrappers — they ship the compiled native library inside the package. Consumers never need a Rust toolchain.
+
+---
+
 ## Docker Deployment
 
 ```bash
